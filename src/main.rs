@@ -48,12 +48,7 @@ impl IrcClient {
     prefix.push_str(":");
     prefix.push_str(&nick);
     prefix.push_str("!~irc.rs ");
-    let re = Regex::new(&format!(
-      "{}{}{}",
-      r":([^\s]+)\sPRIVMSG\s",
-      r"([^\s]+)",
-      r"\s:(.+)")
-    ).unwrap();
+    let re = Regex::new(r":([^\s]+)\sPRIVMSG\s([^\s]+)\s:(.+)").unwrap();
     let gr = format!("MODE {} :+i",&nick);
 
     IrcClient {
@@ -64,7 +59,7 @@ impl IrcClient {
       prefix: prefix,
       stream: stream,
       reader: reader,
-      loginWait: time::Duration::from_millis(5000),
+      loginWait: time::Duration::from_millis(500),
       handshakeDone: false,
       msgRegex: re,
       expectedGreeting: gr
@@ -111,8 +106,9 @@ impl IrcClient {
 
   }
 
-  pub fn send(&self, msg: String) {
-
+  pub fn send(&mut self, msg: String) {
+    let room = self.room.to_string();
+    self.sendCmd("PRIVMSG", &format!("{} :{}", room, msg));
   }
 
   /*
@@ -171,18 +167,22 @@ impl IrcClient {
           return None;
         } else {
           let c = self.msgRegex.captures(&str);
+          println!("1");
           match c {
             Some(c) => {
-              if c.len() == 3 {
-                let host = c[0].to_string();
-                let receiver = c[1].to_string();
-                let msg = c[2].to_string();
+              if c.len() == 4 {
+                let host = c[1].to_string();
+                let receiver = c[2].to_string();
+                let msg = c[3].to_string();
                 let isPrivate: bool = receiver == self.nick;
                 return Some(ChatEvent { host, receiver, msg, isPrivate });
+              } else {
+                println!("None cap! {}",c.len());
+                return None;
               }
-              return None;
             },
             None => {
+              println!("None!");
               return None;
             }
           }
@@ -215,10 +215,16 @@ fn main() {
 
   println!("[CONNECTED]");
 
+  let mut counter = 0;
+
   loop {
 
     if let Some(ev) = client.pump_event() {
       println!("Event: H={} R={} MSG={}", ev.host, ev.receiver, ev.msg);
+      if (ev.msg.contains("rustbot")) {
+        client.send(format!("Hello! #{}",counter));
+        counter += 1;
+      }
     }
 
     thread::sleep(time::Duration::from_millis(10));
